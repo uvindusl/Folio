@@ -55,6 +55,11 @@ html[data-theme='light'] {
   --orb-o: 0.32;
 }
 
+/* Light theme: reduce icon contrast since SVGs use fixed strokes */
+html[data-theme='light'] img {
+  filter: brightness(0.7);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -222,10 +227,6 @@ a {
   height: 100dvh;
   padding: 12px;
   transition: grid-template-columns 0.45s var(--ease);
-}
-
-.app.rail {
-  --sidebar: 78px;
 }
 
 /* ---------- sidebar ---------- */
@@ -868,6 +869,12 @@ a {
   .app.rail .logo {
     width: 38px;
     height: 38px;
+  }
+}
+
+@media (max-width: 900px) {
+  .rail-toggle {
+    display: none;
   }
 }
 

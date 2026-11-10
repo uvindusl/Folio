@@ -43,7 +43,7 @@ function FolderNode({
         <span className="count">{node.count ?? 0}</span>
       </button>
 
-      <div className="children">
+      <div className="children" inert={!isOpen}>
         <div className="children-inner">
           {children.map((child) =>
             child.type === 'dir' ? (
