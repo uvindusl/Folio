@@ -1,12 +1,19 @@
 <!doctype html>
-<html>
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
-    <title>Electron</title>
+    <title>Folio — your notes, in orbit</title>
+    <meta name="description" content="A calm, local-first home for your Markdown files." />
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
     />
   </head>
 

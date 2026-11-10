@@ -1,14 +1,133 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
-import { join } from 'path'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
+import { join, resolve, basename, extname } from 'node:path'
+import { readdir, writeFile, access } from 'node:fs/promises'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+
+type VaultNode = {
+  name: string
+  path: string
+  type: 'file' | 'dir'
+  count?: number
+  children?: VaultNode[]
+}
+
+const NOTE_EXTENSIONS = new Set(['.md', '.markdown', '.mdx', '.txt'])
+const IGNORED_DIRS = new Set(['node_modules', '.git', '.obsidian', '.trash'])
+
+let vaultRoot: string | null = null
+
+// Electron + Vulkan on Wayland can leave the window blank (or never paint).
+// Software rendering keeps the window visible on Wayland desktops.
+if (process.platform === 'linux' && process.env.XDG_SESSION_TYPE === 'wayland') {
+  app.disableHardwareAcceleration()
+}
+
+function countFiles(nodes: VaultNode[]): number {
+  return nodes.reduce(
+    (total, node) => total + (node.type === 'file' ? 1 : countFiles(node.children ?? [])),
+    0
+  )
+}
+
+async function buildTree(dir: string, depth = 0): Promise<VaultNode[]> {
+  if (depth > 8) return []
+
+  let entries
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch {
+    return []
+  }
+
+  const folders: VaultNode[] = []
+  const files: VaultNode[] = []
+
+  for (const entry of entries) {
+    if (entry.name.startsWith('.') || IGNORED_DIRS.has(entry.name)) continue
+
+    const fullPath = join(dir, entry.name)
+
+    if (entry.isDirectory()) {
+      const children = await buildTree(fullPath, depth + 1)
+      folders.push({
+        name: entry.name,
+        path: fullPath,
+        type: 'dir',
+        count: countFiles(children),
+        children
+      })
+    } else if (NOTE_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
+      files.push({ name: entry.name, path: fullPath, type: 'file' })
+    }
+  }
+
+  const byName = (a: VaultNode, b: VaultNode): number => a.name.localeCompare(b.name)
+  return [...folders.sort(byName), ...files.sort(byName)]
+}
+
+async function readVault(): Promise<{ path: string; name: string; tree: VaultNode[] } | null> {
+  if (!vaultRoot) return null
+  const tree = await buildTree(vaultRoot)
+  return { path: vaultRoot, name: basename(vaultRoot), tree }
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function registerIpcHandlers(): void {
+  ipcMain.handle('vault:open', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const options: Electron.OpenDialogOptions = {
+      title: 'Open Vault',
+      buttonLabel: 'Open Vault',
+      properties: ['openDirectory', 'createDirectory']
+    }
+
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options)
+
+    if (result.canceled || result.filePaths.length === 0) return null
+
+    vaultRoot = resolve(result.filePaths[0])
+    app.addRecentDocument(vaultRoot)
+    return readVault()
+  })
+
+  ipcMain.handle('vault:rescan', async () => readVault())
+
+  ipcMain.handle('vault:create', async () => {
+    if (!vaultRoot) return null
+
+    let name = 'Untitled.md'
+    let counter = 1
+    while (await fileExists(join(vaultRoot, name))) {
+      counter += 1
+      name = `Untitled ${counter}.md`
+    }
+
+    const filePath = join(vaultRoot, name)
+    await writeFile(filePath, `# ${name.replace(/\.md$/i, '')}\n\n`, 'utf-8')
+    return { path: filePath, name, content: `# ${name.replace(/\.md$/i, '')}\n\n` }
+  })
+}
 
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
-    show: false,
+    width: 1080,
+    height: 760,
+    minWidth: 760,
+    minHeight: 520,
+    show: true,
+    backgroundColor: '#07080c',
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
@@ -17,8 +136,9 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => {
+  mainWindow.once('ready-to-show', () => {
     mainWindow.show()
+    mainWindow.focus()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -49,8 +169,7 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
+  registerIpcHandlers()
 
   createWindow()
 
